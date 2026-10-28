@@ -1,0 +1,6 @@
+{
+  "name": "Cristor Toro Pro - SatFinder",
+  "description": "تطبيق توجيه وضبط أطباق الأقمار الصناعية وقياس الإشارة بالديسيبل، متوافق مع أجهزة Cristor Toro 700 وAli 2661 وقاعدة بيانات الأقمار الشاملة وصافرة التوجيه الصوتية.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
