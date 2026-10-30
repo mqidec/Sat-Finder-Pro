@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Radio, CheckCircle, AlertTriangle, Activity, Sliders, Waves } from 'lucide-react';
-import { Satellite, Transponder, SignalMetrics } from '../types/satellite';
+import { Volume2, VolumeX, Radio, CheckCircle, AlertTriangle, Activity, Sliders, Waves, Clock, Cpu, WifiOff } from 'lucide-react';
+import { Satellite, Transponder, SignalMetrics, ReceiverConfig } from '../types/satellite';
 import { audioBeeper } from '../utils/audioBeeper';
 import { ConstellationDiagram } from './ConstellationDiagram';
 import { TRANSLATIONS, Language, Translations } from '../i18n/translations';
+import { signalReader } from '../services/telemetry/SignalReader';
+import { SignalHistorySample, TelemetryPacket } from '../types/telemetry';
 
 interface Props {
   satellite: Satellite;
   transponder: Transponder;
   metrics: SignalMetrics;
+  receiverConfig: ReceiverConfig;
   onUpdateMetrics: (newMetrics: Partial<SignalMetrics>) => void;
+  onOpenReceiverModal: () => void;
   isOutdoorSunMode: boolean;
   t?: Translations;
   lang?: Language;
@@ -19,20 +23,50 @@ export const SignalMeter: React.FC<Props> = ({
   satellite,
   transponder,
   metrics,
+  receiverConfig,
   onUpdateMetrics,
+  onOpenReceiverModal,
   isOutdoorSunMode,
   t = TRANSLATIONS.ar,
   lang = 'ar'
 }) => {
   const [isAudioBeeping, setIsAudioBeeping] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(0.6);
-  const [showConstellation, setShowConstellation] = useState<boolean>(true);
+  const [showConstellation, setShowConstellation] = useState<boolean>(false);
+  const [showHistory, setShowHistory] = useState<boolean>(true);
   const [isAutoDrift, setIsAutoDrift] = useState<boolean>(false);
+  const [history, setHistory] = useState<SignalHistorySample[]>([]);
+  const [lastPacketTime, setLastPacketTime] = useState<string>('');
+  const [packetLatency, setPacketLatency] = useState<number | null>(null);
+
+  // Subscribe to central SignalReader telemetry
+  useEffect(() => {
+    signalReader.setTransponderContext(transponder);
+
+    const unsubscribe = signalReader.subscribeTelemetry((packet: TelemetryPacket) => {
+      onUpdateMetrics(packet.metrics);
+      setHistory(signalReader.getHistory());
+      setPacketLatency(packet.latencyMs);
+
+      const d = new Date(packet.receivedAt);
+      setLastPacketTime(
+        `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`
+      );
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [transponder]);
 
   // Sync audio with signal changes
   useEffect(() => {
-    audioBeeper.updateSignal(metrics.snrDb, metrics.isLocked);
-  }, [metrics.snrDb, metrics.isLocked]);
+    if (receiverConfig.isConnected) {
+      audioBeeper.updateSignal(metrics.snrDb, metrics.isLocked);
+    } else {
+      audioBeeper.updateSignal(0, false);
+    }
+  }, [metrics.snrDb, metrics.isLocked, receiverConfig.isConnected]);
 
   const toggleAudio = () => {
     const nextState = audioBeeper.toggle();
@@ -44,21 +78,18 @@ export const SignalMeter: React.FC<Props> = ({
     audioBeeper.setVolume(newVol);
   };
 
-  // Helper to calculate realistic Quality & Lock from SNR
-  const calculateDerivedMetrics = (snr: number) => {
-    const snrVal = Math.max(0, Math.min(18.0, snr));
-    // DVB-S2 lock threshold typically around 6.5 - 7.5 dB depending on FEC/modulation
-    const isLocked = snrVal >= 7.2;
-    // Quality % maps smoothly from 0% at 5dB to 100% at 15.5dB
+  const handleSliderChange = (val: number) => {
+    signalReader.setSimulationSnr(val);
+    // Manual local update if simulation
+    const snrVal = Math.max(0, Math.min(18.0, val));
+    const isLocked = snrVal >= 7.5;
     let qual = 0;
     if (snrVal > 4.0) {
       qual = Math.min(100, Math.max(0, Math.round(((snrVal - 4.5) / 10.5) * 100)));
     }
-    // Strength % (typically exists even with background noise)
     const strength = Math.min(99, Math.round(40 + (snrVal / 16.0) * 55));
     const strengthDbm = Math.round(-85 + (strength / 100) * 50);
 
-    // Realistic BER
     let ber = '--';
     if (!isLocked) {
       ber = snrVal > 4 ? `4.2E-02` : `9.8E-01`;
@@ -68,38 +99,32 @@ export const SignalMeter: React.FC<Props> = ({
       else ber = `7.8E-04`;
     }
 
-    return {
+    onUpdateMetrics({
       snrDb: Math.round(snrVal * 10) / 10,
       qualityPercent: qual,
       strengthPercent: strength,
       strengthDbm,
       ber,
       isLocked
-    };
+    });
   };
 
-  const handleSliderChange = (val: number) => {
-    const derived = calculateDerivedMetrics(val);
-    onUpdateMetrics(derived);
-  };
-
-  // Auto antenna alignment drift simulation (wind / hand wobble)
+  // Auto antenna drift simulation
   useEffect(() => {
-    if (!isAutoDrift) return;
+    if (!isAutoDrift || !receiverConfig.isSimulating) return;
 
     const interval = window.setInterval(() => {
-      // Small random fluctuation ±0.2 dB
-      const delta = (Math.random() - 0.48) * 0.4;
+      const delta = (Math.random() - 0.49) * 0.4;
       const nextSnr = Math.max(0, Math.min(16.5, metrics.snrDb + delta));
-      const derived = calculateDerivedMetrics(nextSnr);
-      onUpdateMetrics(derived);
-    }, 450);
+      handleSliderChange(nextSnr);
+    }, 500);
 
     return () => window.clearInterval(interval);
-  }, [isAutoDrift, metrics.snrDb]);
+  }, [isAutoDrift, metrics.snrDb, receiverConfig.isSimulating]);
 
   // Color selection based on SNR
   const getSnrColorClass = () => {
+    if (!receiverConfig.isConnected) return 'text-slate-500';
     if (isOutdoorSunMode) {
       return metrics.isLocked ? 'text-[#00ff66]' : 'text-[#ffdd00]';
     }
@@ -141,11 +166,6 @@ export const SignalMeter: React.FC<Props> = ({
             <span>{transponder.modulation}</span>
             {transponder.fec && <span> · FEC {transponder.fec}</span>}
           </div>
-          {transponder.channels && transponder.channels.length > 0 && (
-            <div className="text-[10px] text-slate-500 mt-0.5 truncate max-w-sm">
-              {t.mainChannels} {transponder.channels.join(' · ')}
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-3 font-mono text-xs">
@@ -173,10 +193,47 @@ export const SignalMeter: React.FC<Props> = ({
           ? 'bg-black border-2 border-yellow-400 shadow-[0_0_20px_rgba(234,179,8,0.2)]' 
           : 'bg-[#050914] border-2 border-slate-800/90 shadow-2xl'
       }`}>
-        {/* Top Header Labels */}
-        <div className="flex items-center justify-between text-[11px] text-slate-400 tracking-wider">
-          <span className="font-mono">{t.snrTitle}</span>
-          <span className="font-mono">{t.tunerTitle}</span>
+        {/* Telemetry Source & Packet Diagnostics */}
+        <div className="flex items-center justify-between text-[11px] pb-2 border-b border-slate-800/60 gap-2">
+          <div className="flex items-center gap-1.5 font-mono">
+            <span className="text-slate-400">
+              {lang === 'ar' ? 'المصدر:' : 'Source:'}
+            </span>
+            {receiverConfig.isConnected ? (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                receiverConfig.isSimulating
+                  ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                  : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+              }`}>
+                <Cpu className="w-3 h-3" />
+                <span>
+                  {receiverConfig.isSimulating
+                    ? (lang === 'ar' ? 'محاكاة افتراضية (Ali 2661 Sim)' : 'Virtual Simulation')
+                    : (lang === 'ar' ? 'جهاز حقيقي (Cristor Toro)' : 'Hardware Ali 2661')}
+                </span>
+              </span>
+            ) : (
+              <button
+                onClick={onOpenReceiverModal}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-800 hover:bg-rose-900"
+              >
+                <WifiOff className="w-3 h-3" />
+                <span>{lang === 'ar' ? 'غير متصل (اضغط للربط)' : 'Disconnected (Click to connect)'}</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+            {lastPacketTime && (
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                <span>{lastPacketTime}</span>
+              </span>
+            )}
+            {packetLatency !== null && (
+              <span>{packetLatency}ms</span>
+            )}
+          </div>
         </div>
 
         {/* Big Giant SNR Value Display */}
@@ -184,18 +241,22 @@ export const SignalMeter: React.FC<Props> = ({
           <div
             className={`text-6xl sm:text-7xl font-black font-mono tracking-tight transition-colors duration-150 ${getSnrColorClass()}`}
             style={{
-              textShadow: metrics.isLocked
+              textShadow: receiverConfig.isConnected && metrics.isLocked
                 ? (isOutdoorSunMode ? '0 0 25px rgba(0, 255, 102, 0.6)' : '0 0 25px rgba(34, 197, 94, 0.4)')
                 : 'none'
             }}
           >
-            {metrics.snrDb.toFixed(1)}
+            {receiverConfig.isConnected ? metrics.snrDb.toFixed(1) : '--'}
             <span className="text-2xl sm:text-3xl font-bold ml-1 text-slate-400">dB</span>
           </div>
 
           {/* Real Lock Badge */}
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide mt-1 transition-all">
-            {metrics.isLocked ? (
+            {!receiverConfig.isConnected ? (
+              <span className="flex items-center gap-1 text-slate-400 bg-slate-900 border border-slate-700 px-3 py-0.5 rounded-full text-[11px]">
+                <span>{lang === 'ar' ? 'في انتظار إشارة التيونر' : 'Awaiting tuner signal'}</span>
+              </span>
+            ) : metrics.isLocked ? (
               <span className="flex items-center gap-1 text-emerald-400 bg-emerald-950/60 border border-emerald-500/50 px-3 py-0.5 rounded-full">
                 <CheckCircle className="w-3.5 h-3.5" />
                 <span>{t.locked} ({transponder.modulation})</span>
@@ -210,19 +271,22 @@ export const SignalMeter: React.FC<Props> = ({
         </div>
 
         {/* Dual Gauges: Quality % and Signal Strength % */}
-        <div className="grid grid-cols-2 gap-2 my-3">
+        <div className="grid grid-cols-2 gap-2 my-2.5">
           {/* Quality Card */}
           <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/80 text-center">
             <span className="text-[10px] text-slate-400 block font-medium">{t.quality}</span>
-            <div className={`text-2xl font-black font-mono my-0.5 ${metrics.qualityPercent > 60 ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {metrics.qualityPercent}%
+            <div className={`text-2xl font-black font-mono my-0.5 ${
+              !receiverConfig.isConnected
+                ? 'text-slate-500'
+                : metrics.qualityPercent > 60 ? 'text-emerald-400' : 'text-amber-400'
+            }`}>
+              {receiverConfig.isConnected ? `${metrics.qualityPercent}%` : '--'}
             </div>
-            {/* Visual Quality Progress Bar */}
             <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden mt-1 p-0.5">
               <div
                 className="h-full rounded-full transition-all duration-200"
                 style={{
-                  width: `${metrics.qualityPercent}%`,
+                  width: `${receiverConfig.isConnected ? metrics.qualityPercent : 0}%`,
                   background: metrics.qualityPercent > 70
                     ? 'linear-gradient(90deg, #eab308, #22c55e)'
                     : metrics.qualityPercent > 40
@@ -237,13 +301,53 @@ export const SignalMeter: React.FC<Props> = ({
           <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800/80 text-center">
             <span className="text-[10px] text-slate-400 block font-medium">{t.strength}</span>
             <div className="text-xl font-black font-mono my-0.5 text-sky-400">
-              {metrics.strengthPercent}% <span className="text-xs text-slate-400">({metrics.strengthDbm} dBm)</span>
+              {receiverConfig.isConnected ? `${metrics.strengthPercent}%` : '--'}{' '}
+              <span className="text-xs text-slate-400">
+                ({receiverConfig.isConnected ? `${metrics.strengthDbm} dBm` : '--'})
+              </span>
             </div>
             <div className="text-[11px] font-mono text-slate-400">
-              {t.ber} <span className="text-white font-bold">{metrics.ber}</span>
+              {t.ber}{' '}
+              <span className="text-white font-bold">
+                {receiverConfig.isConnected ? metrics.ber : '--'}
+              </span>
             </div>
           </div>
         </div>
+
+        {/* Phase 3: Signal Stability Sparkline / Timeline Log */}
+        {showHistory && history.length > 2 && (
+          <div className="bg-slate-950/90 p-2.5 rounded-xl border border-slate-800/80 text-start my-2">
+            <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1 font-mono">
+              <span className="flex items-center gap-1">
+                <Activity className="w-3 h-3 text-sky-400" />
+                <span>{lang === 'ar' ? 'سجل ثبات الإشارة الزمني (آخر 25 قراءة)' : 'Signal Stability History Log'}</span>
+              </span>
+              <span className="text-emerald-400 font-bold">
+                {metrics.isLocked ? (lang === 'ar' ? 'مستقرة' : 'Stable') : (lang === 'ar' ? 'تذبذب' : 'Jitter')}
+              </span>
+            </div>
+            {/* Visual Mini Timeline Sparkline */}
+            <div className="h-8 flex items-end gap-1 pt-1 px-1 bg-slate-900/60 rounded border border-slate-800/50">
+              {history.slice(-25).map((sample, idx) => {
+                const heightPercent = Math.max(8, Math.min(100, (sample.snrDb / 16.0) * 100));
+                return (
+                  <div
+                    key={idx}
+                    className="flex-1 rounded-t transition-all duration-150"
+                    style={{
+                      height: `${heightPercent}%`,
+                      backgroundColor: sample.isLocked
+                        ? sample.snrDb >= 12 ? '#38bdf8' : '#22c55e'
+                        : '#ef4444'
+                    }}
+                    title={`${sample.snrDb.toFixed(1)} dB`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Acoustic Beeper Quick Bar */}
         <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
@@ -306,65 +410,66 @@ export const SignalMeter: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Signal Manual Tuning Slider & Quick Presets */}
-        <div className="mt-4 pt-3 border-t border-slate-800/80 text-start">
-          <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-            <span className="flex items-center gap-1">
-              <Sliders className="w-3 h-3 text-sky-400" />
-              <span>{t.signalSimulator}</span>
-            </span>
-            <span className="font-mono text-sky-400 font-bold">{metrics.snrDb.toFixed(1)} dB</span>
-          </div>
+        {/* Simulation Mode Controls (Only active when in Simulation) */}
+        {receiverConfig.isSimulating && (
+          <div className="mt-3 pt-3 border-t border-slate-800/80 text-start bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60">
+            <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+              <span className="flex items-center gap-1 text-amber-300 font-semibold">
+                <Sliders className="w-3 h-3" />
+                <span>{t.signalSimulator} (Virtual SNR Tuning)</span>
+              </span>
+              <span className="font-mono text-amber-400 font-bold">{metrics.snrDb.toFixed(1)} dB</span>
+            </div>
 
-          <input
-            type="range"
-            min="0"
-            max="16.5"
-            step="0.1"
-            value={metrics.snrDb}
-            onChange={(e) => handleSliderChange(Number(e.target.value))}
-            className="w-full accent-sky-400 cursor-pointer h-2 bg-slate-800 rounded-lg"
-          />
+            <input
+              type="range"
+              min="0"
+              max="16.5"
+              step="0.1"
+              value={metrics.snrDb}
+              onChange={(e) => handleSliderChange(Number(e.target.value))}
+              className="w-full accent-amber-400 cursor-pointer h-2 bg-slate-800 rounded-lg"
+            />
 
-          {/* Quick Signal Presets */}
-          <div className="flex items-center justify-between gap-1.5 mt-2 flex-wrap">
-            <button
-              onClick={() => handleSliderChange(0)}
-              className="flex-1 py-1 text-[10px] bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 text-rose-400"
-            >
-              {t.presetZero}
-            </button>
-            <button
-              onClick={() => handleSliderChange(5.2)}
-              className="flex-1 py-1 text-[10px] bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 text-amber-400"
-            >
-              {t.presetWeak}
-            </button>
-            <button
-              onClick={() => handleSliderChange(8.8)}
-              className="flex-1 py-1 text-[10px] bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 text-yellow-300"
-            >
-              {t.presetLock}
-            </button>
-            <button
-              onClick={() => handleSliderChange(13.5)}
-              className="flex-1 py-1 text-[10px] bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 text-emerald-400"
-            >
-              {t.presetOptimal}
-            </button>
-            <button
-              onClick={() => setIsAutoDrift(!isAutoDrift)}
-              className={`px-2 py-1 text-[10px] rounded border flex items-center gap-1 ${
-                isAutoDrift
-                  ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                  : 'bg-slate-900 text-slate-400 border-slate-800'
-              }`}
-            >
-              <Waves className="w-3 h-3" />
-              <span>{isAutoDrift ? t.windSimActive : t.windSim}</span>
-            </button>
+            <div className="flex items-center justify-between gap-1.5 mt-2 flex-wrap">
+              <button
+                onClick={() => handleSliderChange(0)}
+                className="flex-1 py-1 text-[10px] bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 text-rose-400 font-bold"
+              >
+                {t.presetZero}
+              </button>
+              <button
+                onClick={() => handleSliderChange(5.2)}
+                className="flex-1 py-1 text-[10px] bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 text-amber-400 font-bold"
+              >
+                {t.presetWeak}
+              </button>
+              <button
+                onClick={() => handleSliderChange(8.8)}
+                className="flex-1 py-1 text-[10px] bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 text-yellow-300 font-bold"
+              >
+                {t.presetLock}
+              </button>
+              <button
+                onClick={() => handleSliderChange(13.5)}
+                className="flex-1 py-1 text-[10px] bg-slate-900 hover:bg-slate-800 rounded border border-slate-800 text-emerald-400 font-bold"
+              >
+                {t.presetOptimal}
+              </button>
+              <button
+                onClick={() => setIsAutoDrift(!isAutoDrift)}
+                className={`px-2 py-1 text-[10px] rounded border flex items-center gap-1 ${
+                  isAutoDrift
+                    ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                    : 'bg-slate-900 text-slate-400 border-slate-800'
+                }`}
+              >
+                <Waves className="w-3 h-3" />
+                <span>{isAutoDrift ? t.windSimActive : t.windSim}</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

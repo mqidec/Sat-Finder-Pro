@@ -82,6 +82,32 @@ export const ApkExportModal: React.FC<Props> = ({
           </button>
         </div>
 
+        {/* Direct Ready APK Download Banner */}
+        <div className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/80 to-sky-950/80 border border-emerald-500/50 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500 text-black flex items-center justify-center font-black shrink-0 shadow-md">
+              <Download className="w-5 h-5 stroke-[2.5]" />
+            </div>
+            <div>
+              <div className="font-bold text-white text-xs sm:text-sm flex items-center gap-1.5">
+                <span>ملف APK جاهز للتحميل والتثبيت</span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded font-mono">4.6 MB</span>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                حزمة <code className="text-sky-300 font-mono">APK_DOWNLOAD/app-debug.apk</code> مبنية ومدرجة بالمشروع.
+              </p>
+            </div>
+          </div>
+          <a
+            href="/app-debug.apk"
+            download="Cristor-Toro-Pro.apk"
+            className="w-full sm:w-auto px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-md transition-all shrink-0"
+          >
+            <Download className="w-4 h-4 stroke-[2.5]" />
+            <span>تنزيل APK الآن</span>
+          </a>
+        </div>
+
         {/* Tab Navigation */}
         <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs">
           <button

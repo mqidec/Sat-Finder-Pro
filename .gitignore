@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+!.build-outputs/
+!.build-outputs/**
+!APK_DOWNLOAD/
+!APK_DOWNLOAD/**
+!*.apk
+

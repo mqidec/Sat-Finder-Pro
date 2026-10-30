@@ -16,7 +16,8 @@ import {
   Navigation,
   Sparkles,
   Download,
-  Globe
+  Globe,
+  BookOpen
 } from 'lucide-react';
 import { Satellite, Transponder, SignalMetrics, UserLocation, ReceiverConfig } from './types/satellite';
 import { INITIAL_SATELLITES, POPULAR_CITIES } from './data/satellites';
@@ -27,8 +28,10 @@ import { SatSelector } from './components/SatSelector';
 import { ReceiverConnectModal } from './components/ReceiverConnectModal';
 import { GeoSatelliteSuggester } from './components/GeoSatelliteSuggester';
 import { ApkExportModal } from './components/ApkExportModal';
+import { DocumentationModal } from './components/DocumentationModal';
 import { audioBeeper } from './utils/audioBeeper';
 import { suggestNearestSatellites, haversineDistanceKm } from './utils/satelliteMath';
+import { signalReader } from './services/telemetry/SignalReader';
 
 export default function App() {
   // Navigation active tab
@@ -116,6 +119,7 @@ export default function App() {
   const [showReceiverModal, setShowReceiverModal] = useState<boolean>(false);
   const [showGeoModal, setShowGeoModal] = useState<boolean>(false);
   const [showApkModal, setShowApkModal] = useState<boolean>(false);
+  const [showDocModal, setShowDocModal] = useState<boolean>(false);
 
   // Multi-language selection state (ar, fr, en)
   const [language, setLanguage] = useState<Language>(() => {
@@ -377,6 +381,22 @@ export default function App() {
               <span className="hidden sm:inline text-[11px]">{t.apkBtn}</span>
             </button>
 
+            {/* Field Guide & Protocol Documentation Button */}
+            <button
+              onClick={() => setShowDocModal(true)}
+              className={`px-2 py-1.5 sm:px-2.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 min-h-[36px] shadow-sm ${
+                isOutdoorSunMode
+                  ? 'bg-amber-400 text-black font-black'
+                  : 'bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40'
+              }`}
+              title="Documentation & Guide"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline text-[11px]">
+                {language === 'ar' ? 'الدليل والبروتوكول' : 'Guide'}
+              </span>
+            </button>
+
             {/* GPS Geolocation & Nearest Satellite Suggester Button */}
             <button
               onClick={() => setShowGeoModal(true)}
@@ -519,7 +539,9 @@ export default function App() {
               satellite={selectedSat}
               transponder={selectedTp}
               metrics={metrics}
+              receiverConfig={receiverConfig}
               onUpdateMetrics={handleUpdateMetrics}
+              onOpenReceiverModal={() => setShowReceiverModal(true)}
               isOutdoorSunMode={isOutdoorSunMode}
               t={t}
               lang={language}
@@ -554,7 +576,9 @@ export default function App() {
               satellite={selectedSat}
               transponder={selectedTp}
               metrics={metrics}
+              receiverConfig={receiverConfig}
               onUpdateMetrics={handleUpdateMetrics}
+              onOpenReceiverModal={() => setShowReceiverModal(true)}
               isOutdoorSunMode={isOutdoorSunMode}
               t={t}
               lang={language}
@@ -734,6 +758,16 @@ export default function App() {
       {showApkModal && (
         <ApkExportModal
           onClose={() => setShowApkModal(false)}
+          isOutdoorSunMode={isOutdoorSunMode}
+          t={t}
+          lang={language}
+        />
+      )}
+
+      {/* Field Guide & Protocol Documentation Modal */}
+      {showDocModal && (
+        <DocumentationModal
+          onClose={() => setShowDocModal(false)}
           isOutdoorSunMode={isOutdoorSunMode}
           t={t}
           lang={language}

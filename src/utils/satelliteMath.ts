@@ -1,25 +1,49 @@
 import { DishCalculation, Satellite } from '../types/satellite';
+import { ObstacleEvaluation } from '../types/telemetry';
 
-// Earth radius in kilometers
-const RE = 6378.137;
-// Geostationary satellite orbit radius in kilometers (Earth radius + ~35,786 km)
-const RS = 42164.57;
+// Earth equatorial radius in kilometers (WGS-84 standard)
+export const RE = 6378.137;
+// Geostationary satellite orbit radius in kilometers (Earth radius + ~35,786.4 km altitude)
+export const RS = 42164.57;
+// Geostationary ratio RE / RS
+export const RE_OVER_RS = RE / RS; // ~0.151267
 
 /**
  * Converts degrees to radians
  */
-const toRad = (deg: number): number => (deg * Math.PI) / 180;
+export const toRad = (deg: number): number => (deg * Math.PI) / 180;
 
 /**
  * Converts radians to degrees
  */
-const toDeg = (rad: number): number => (rad * 180) / Math.PI;
+export const toDeg = (rad: number): number => (rad * 180) / Math.PI;
 
 /**
- * Calculates dish pointing parameters:
- * - True Azimuth
- * - Elevation
- * - LNB Polarization Tilt / Skew
+ * Calculates World Magnetic Model (WMM) approximate magnetic declination in degrees.
+ * Positive = East declination (Compass needle points East of True North)
+ * Negative = West declination (Compass needle points West of True North)
+ */
+export function estimateMagneticDeclination(lat: number, lon: number): number {
+  const latR = toRad(lat);
+  const lonR = toRad(lon);
+
+  // Dipole & quadrupole spherical approximation
+  const baseDec =
+    1.2 +
+    0.08 * (lon - 3.0) -
+    0.03 * (lat - 36.0) +
+    0.001 * (lon - 3.0) * (lat - 36.0) +
+    Math.sin(lonR * 2) * 1.5 * Math.cos(latR);
+
+  return Math.round(Math.max(-25, Math.min(25, baseDec)) * 10) / 10;
+}
+
+/**
+ * Calculates dish pointing parameters based on international SatLex & ITU-R standards:
+ * - True Azimuth (السمت الحقيقي بالنسبة للشمال الجغرافي 0°)
+ * - Magnetic Azimuth (السمت المغناطيسي بالنسبة للبوصلة)
+ * - Elevation (زاوية الارتفاع الرأسي)
+ * - LNB Polarization Tilt / Skew (زاوية دوران اللاقط LNB)
  * - Distance to satellite (km)
  */
 export function calculateDishAngles(
@@ -31,56 +55,74 @@ export function calculateDishAngles(
   const deltaLon = satLon - userLon;
   const deltaLonR = toRad(deltaLon);
 
-  // 1. Elevation Calculation
+  // 1. Central angle / Great circle arc angle g
   // cos(g) = cos(lat) * cos(deltaLon)
   const cosG = Math.cos(latR) * Math.cos(deltaLonR);
-  
-  // Elevation angle:
-  // tan(El) = (cos(g) - (RE / RS)) / sin(g)
   const sinG = Math.sqrt(Math.max(0, 1 - cosG * cosG));
-  let elevation = 0;
-  
-  if (sinG !== 0) {
-    const elRad = Math.atan((cosG - (RE / RS)) / sinG);
+
+  // 2. Elevation Calculation
+  // tan(El) = (cos(g) - (RE / RS)) / sin(g)
+  let elevation = -90;
+  if (sinG > 1e-7) {
+    const elRad = Math.atan((cosG - RE_OVER_RS) / sinG);
     elevation = toDeg(elRad);
+  } else if (cosG >= 1.0) {
+    elevation = 90;
   }
 
-  // Check if satellite is above horizon
   const isLineOfSight = elevation > 0;
 
-  // 2. Azimuth Calculation
+  // 3. True Azimuth Calculation (SatLex / ITU-R Standard):
+  // alpha = atan(tan(|deltaLon|) / sin(lat))
   let azimuthTrue = 0;
-  if (Math.abs(userLat) > 0.0001) {
-    const azRad = Math.PI + Math.atan2(-Math.sin(deltaLonR), Math.tan(latR));
-    azimuthTrue = toDeg(azRad);
-    
-    // Normalize to 0 - 360
-    if (azimuthTrue < 0) azimuthTrue += 360;
-    if (azimuthTrue >= 360) azimuthTrue -= 360;
+  if (Math.abs(userLat) > 0.001) {
+    const alphaRad = Math.atan(Math.tan(Math.abs(deltaLonR)) / Math.sin(Math.abs(latR)));
+    const alpha = toDeg(alphaRad);
+
+    if (userLat >= 0) {
+      // Northern Hemisphere: South is 180°
+      if (deltaLon > 0) {
+        azimuthTrue = 180 - alpha; // South-East
+      } else if (deltaLon < 0) {
+        azimuthTrue = 180 + alpha; // South-West
+      } else {
+        azimuthTrue = 180; // Due South
+      }
+    } else {
+      // Southern Hemisphere: North is 0°
+      if (deltaLon > 0) {
+        azimuthTrue = alpha; // North-East
+      } else if (deltaLon < 0) {
+        azimuthTrue = 360 - alpha; // North-West
+      } else {
+        azimuthTrue = 0; // Due North
+      }
+    }
   } else {
-    // On the equator
+    // Equator
     azimuthTrue = deltaLon > 0 ? 90 : 270;
   }
+  azimuthTrue = ((azimuthTrue % 360) + 360) % 360;
 
-  // 3. LNB Skew / Polarization Tilt Calculation
-  // Positive = Clockwise looking into dish from front of LNB
+  // 4. Magnetic Azimuth
+  const declination = estimateMagneticDeclination(userLat, userLon);
+  let azimuthMagnetic = azimuthTrue - declination;
+  azimuthMagnetic = ((azimuthMagnetic % 360) + 360) % 360;
+
+  // 5. LNB Polarization Tilt / Skew (degrees)
+  // Standard convention (looking into dish face):
+  // When sat is West of user (deltaLon < 0), rotate LNB Clockwise (+)
+  // When sat is East of user (deltaLon > 0), rotate LNB Counter-Clockwise (-)
   let lnbSkew = 0;
   if (Math.abs(userLat) > 0.001) {
-    const skewRad = Math.atan(Math.sin(deltaLonR) / Math.tan(latR));
+    const skewRad = -Math.atan(Math.sin(deltaLonR) / Math.tan(latR));
     lnbSkew = toDeg(skewRad);
   }
 
-  // 4. Distance to Satellite:
-  // d = sqrt(RE^2 + RS^2 - 2*RE*RS*cos(g))
+  // 6. Slant range / Distance to Satellite in km
   const distanceKm = Math.round(
-    Math.sqrt(RE * RE + RS * RS - 2 * RE * RS * cosG)
+    Math.sqrt(Math.max(0, RE * RE + RS * RS - 2 * RE * RS * cosG))
   );
-
-  // Magnetic Azimuth (Rough magnetic declination estimation based on lon/lat)
-  const approxDeclination = Math.sin(toRad(userLon)) * 2.5;
-  let azimuthMagnetic = azimuthTrue - approxDeclination;
-  if (azimuthMagnetic < 0) azimuthMagnetic += 360;
-  if (azimuthMagnetic >= 360) azimuthMagnetic -= 360;
 
   return {
     azimuthTrue: Math.round(azimuthTrue * 10) / 10,
@@ -93,7 +135,52 @@ export function calculateDishAngles(
 }
 
 /**
- * Format orbital position nicely (e.g., "7.0°W" or "19.2°E")
+ * Evaluates geometric obstacle clearance
+ */
+export function evaluateObstacleClearance(
+  dishElevationDeg: number,
+  obstacleDistanceMeters: number = 20,
+  obstacleHeightAboveDishMeters: number = 5
+): ObstacleEvaluation {
+  const obstacleAngleDeg =
+    toDeg(Math.atan(Math.max(0, obstacleHeightAboveDishMeters) / Math.max(1, obstacleDistanceMeters)));
+
+  const minClearanceElevationDeg = obstacleAngleDeg + 3.0;
+  const clearanceMarginDeg = Math.round((dishElevationDeg - minClearanceElevationDeg) * 10) / 10;
+  const isClear = dishElevationDeg >= minClearanceElevationDeg;
+
+  const maxAllowedHeight =
+    Math.tan(toRad(Math.max(0, dishElevationDeg - 3.0))) * obstacleDistanceMeters;
+
+  let recommendationAr = '';
+  let recommendationFr = '';
+  let recommendationEn = '';
+
+  if (isClear) {
+    recommendationAr = `خط الرؤية مفتوح تماماً بهامش أمان ${clearanceMarginDeg}° فوق العائق.`;
+    recommendationFr = `Ligne de vue dégagée avec une marge de sécurité de ${clearanceMarginDeg}°.`;
+    recommendationEn = `Line of sight completely clear with ${clearanceMarginDeg}° safety margin.`;
+  } else {
+    const deficit = Math.abs(clearanceMarginDeg);
+    recommendationAr = `تنبيه: العائق يحجب مسار الإشارة بزاوية نقص ${deficit}°. يجب رفع الصحن أو نقله.`;
+    recommendationFr = `Attention: Obstacle bloquant la vue directe de ${deficit}°. Élever la parabole.`;
+    recommendationEn = `Warning: Obstacle blocking path by ${deficit}°. Raise dish or relocate.`;
+  }
+
+  return {
+    userElevationDeg: dishElevationDeg,
+    minClearanceElevationDeg: Math.round(minClearanceElevationDeg * 10) / 10,
+    isClear,
+    clearanceMarginDeg,
+    estimatedObstacleHeightLimitMeters: Math.round(maxAllowedHeight * 10) / 10,
+    recommendationAr,
+    recommendationFr,
+    recommendationEn
+  };
+}
+
+/**
+ * Format orbital position nicely
  */
 export function formatOrbitalPos(pos: number): string {
   if (pos === 0) return '0.0°';
@@ -122,8 +209,8 @@ export function haversineDistanceKm(
 export interface SatelliteSuggestion {
   satellite: Satellite;
   angles: DishCalculation;
-  distanceDeltaLon: number; // |sat.pos - userLon|
-  isZenith: boolean; // Highest elevation in sky
+  distanceDeltaLon: number;
+  isZenith: boolean;
   receptionQuality: 'OPTIMAL' | 'VERY_GOOD' | 'GOOD' | 'MARGINAL';
   installerNote: string;
 }
@@ -146,12 +233,9 @@ export function suggestNearestSatellites(
         distanceDeltaLon
       };
     })
-    .filter((item) => item.angles.isLineOfSight && item.angles.elevation >= 10.0);
+    .filter((item) => item.angles.isLineOfSight && item.angles.elevation >= 8.0);
 
-  // Sort primarily by highest elevation (zenith proximity = highest overhead, shortest path through atmosphere)
   calculated.sort((a, b) => b.angles.elevation - a.angles.elevation);
-
-  const highestElevation = calculated.length > 0 ? calculated[0].angles.elevation : 0;
 
   return calculated.map((item, index) => {
     const isZenith = index === 0;

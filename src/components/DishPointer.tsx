@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Compass, MapPin, RotateCw, Navigation, Info, CheckCircle2, Sparkles, TrendingUp } from 'lucide-react';
+import { Compass, MapPin, Navigation, Info, CheckCircle2, Sparkles, TrendingUp, Building2, HelpCircle, ShieldCheck } from 'lucide-react';
 import { Satellite, UserLocation } from '../types/satellite';
-import { calculateDishAngles, formatOrbitalPos, suggestNearestSatellites } from '../utils/satelliteMath';
+import { calculateDishAngles, estimateMagneticDeclination, evaluateObstacleClearance, formatOrbitalPos, suggestNearestSatellites } from '../utils/satelliteMath';
 import { POPULAR_CITIES } from '../data/satellites';
 import { TRANSLATIONS, Language, Translations } from '../i18n/translations';
 
@@ -36,6 +36,12 @@ export const DishPointer: React.FC<Props> = ({
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [locationError, setLocationError] = useState<string | null>(null);
 
+  // Phase 4: Obstacle Clearance evaluation state
+  const [showObstacleTool, setShowObstacleTool] = useState<boolean>(false);
+  const [obstacleDistance, setObstacleDistance] = useState<number>(20);
+  const [obstacleHeight, setObstacleHeight] = useState<number>(5);
+  const [showAzimuthExplainer, setShowAzimuthExplainer] = useState<boolean>(false);
+
   // Calculate angles
   const angles = calculateDishAngles(
     userLocation.latitude,
@@ -43,13 +49,15 @@ export const DishPointer: React.FC<Props> = ({
     satellite.pos
   );
 
+  const declination = estimateMagneticDeclination(userLocation.latitude, userLocation.longitude);
+  const obstacleEval = evaluateObstacleClearance(angles.elevation, obstacleDistance, obstacleHeight);
+
   // Device orientation listener
   useEffect(() => {
     let handler: ((event: DeviceOrientationEvent) => void) | null = null;
 
     if (window.DeviceOrientationEvent) {
       handler = (event: DeviceOrientationEvent) => {
-        // webkitCompassHeading is iOS true compass heading; alpha is standard heading
         const heading = (event as unknown as { webkitCompassHeading?: number }).webkitCompassHeading ?? 
           (event.alpha !== null ? (360 - event.alpha) % 360 : null);
         
@@ -58,9 +66,7 @@ export const DishPointer: React.FC<Props> = ({
           setCompassSupported(true);
         }
 
-        // Pitch / Tilt for elevation
         if (event.beta !== null) {
-          // beta is front-to-back tilt in degrees (-180 to 180)
           setDevicePitch(Math.round(event.beta));
         }
       };
@@ -78,7 +84,7 @@ export const DishPointer: React.FC<Props> = ({
   // Handle GPS location request
   const handleGetGpsLocation = () => {
     if (!navigator.geolocation) {
-      setLocationError('خاصية GPS غير مدعومة في هذا المتصفح');
+      setLocationError(lang === 'ar' ? 'خاصية GPS غير مدعومة في هذا المتصفح' : 'GPS not supported');
       return;
     }
 
@@ -98,7 +104,7 @@ export const DishPointer: React.FC<Props> = ({
       },
       (err) => {
         setIsLocating(false);
-        setLocationError(`تعذر الحصول على الموقع: ${err.message}`);
+        setLocationError(lang === 'ar' ? `تعذر الحصول على الموقع: ${err.message}` : `GPS error: ${err.message}`);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -235,12 +241,21 @@ export const DishPointer: React.FC<Props> = ({
         <div className={`p-3 rounded-xl border text-center relative overflow-hidden ${
           isOutdoorSunMode ? 'bg-black border-yellow-400' : 'bg-slate-900/90 border-slate-800'
         }`}>
-          <span className="text-[11px] text-slate-400 font-medium block">{t.azimuthTrue}</span>
+          <div className="flex items-center justify-center gap-1 text-[11px] text-slate-400 font-medium">
+            <span>{t.azimuthTrue}</span>
+            <button
+              onClick={() => setShowAzimuthExplainer(!showAzimuthExplainer)}
+              className="text-sky-400 hover:text-sky-300"
+              title="توضيح الفرق بين السمت الحقيقي والمغناطيسي"
+            >
+              <HelpCircle className="w-3 h-3" />
+            </button>
+          </div>
           <div className="text-2xl font-black font-mono my-1 tracking-tight text-sky-400">
             {angles.azimuthTrue}°
           </div>
-          <span className="text-[10px] text-slate-500 font-mono block">
-            {t.azimuthMag} {angles.azimuthMagnetic}°
+          <span className="text-[10px] text-slate-400 font-mono block">
+            {t.azimuthMag}: <strong className="text-amber-300">{angles.azimuthMagnetic}°</strong>
           </span>
           {isAlignedAzimuth && (
             <div className="mt-1 flex items-center justify-center gap-1 text-[10px] text-emerald-400 font-bold">
@@ -276,6 +291,26 @@ export const DishPointer: React.FC<Props> = ({
         </div>
       </div>
 
+      {/* Explainer: True North vs Magnetic North */}
+      {showAzimuthExplainer && (
+        <div className="bg-sky-950/40 p-3 rounded-xl border border-sky-800/60 text-xs text-sky-200 space-y-1.5 leading-relaxed">
+          <div className="font-bold flex items-center gap-1.5 text-sky-300">
+            <Info className="w-4 h-4" />
+            <span>{lang === 'ar' ? 'الفرق بين السمت الحقيقي والمغناطيسي:' : 'True vs Magnetic Azimuth:'}</span>
+          </div>
+          <p>
+            {lang === 'ar'
+              ? `• السمت الحقيقي (${angles.azimuthTrue}°): زاوية التوجيه المقاسة بالنسبة للشمال الجغرافي للأرض (الخرائط والأقمار).`
+              : `• True Azimuth (${angles.azimuthTrue}°): Referenced to Earth geographic North.`}
+          </p>
+          <p>
+            {lang === 'ar'
+              ? `• السمت المغناطيسي (${angles.azimuthMagnetic}°): الزاوية التي تقرأها مباشرة على إبرة البوصلة الميدانية، بعد تصحيح الانحراف المغناطيسي للموقع (${declination > 0 ? `+${declination}°` : `${declination}°`}).`
+              : `• Magnetic Azimuth (${angles.azimuthMagnetic}°): Compass needle heading, corrected for local declination (${declination}°).`}
+          </p>
+        </div>
+      )}
+
       {/* Visual Compass & Interactive Inclinometer */}
       <div className={`p-4 rounded-xl border ${isOutdoorSunMode ? 'bg-black border-yellow-400/40' : 'bg-slate-900/90 border-slate-800'}`}>
         <div className="flex items-center justify-between mb-3 text-xs">
@@ -298,10 +333,8 @@ export const DishPointer: React.FC<Props> = ({
           {/* Compass Dial SVG */}
           <div className="relative w-48 h-48 flex items-center justify-center">
             <svg viewBox="0 0 200 200" className="w-full h-full transform transition-transform duration-300">
-              {/* Outer Ring */}
               <circle cx="100" cy="100" r="92" fill="#090d16" stroke="#1e293b" strokeWidth="3" />
               
-              {/* Tick marks every 30 deg */}
               {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map(deg => {
                 const rad = ((deg - 90) * Math.PI) / 180;
                 const x1 = 100 + Math.cos(rad) * 82;
@@ -321,7 +354,6 @@ export const DishPointer: React.FC<Props> = ({
                 );
               })}
 
-              {/* Cardinal directions */}
               <text x="100" y="24" fill="#ef4444" fontSize="12" fontWeight="bold" textAnchor="middle">{t.north}</text>
               <text x="178" y="104" fill="#94a3b8" fontSize="11" textAnchor="middle">{t.east}</text>
               <text x="100" y="186" fill="#94a3b8" fontSize="11" textAnchor="middle">{t.south}</text>
@@ -349,7 +381,7 @@ export const DishPointer: React.FC<Props> = ({
                 );
               })()}
 
-              {/* Current Phone / Dish Pointer Needle */}
+              {/* Current Phone Pointer Needle */}
               {(() => {
                 const headingRad = ((currentHeading - 90) * Math.PI) / 180;
                 const hx = 100 + Math.cos(headingRad) * 65;
@@ -372,12 +404,10 @@ export const DishPointer: React.FC<Props> = ({
                 );
               })()}
 
-              {/* Center Hub */}
               <circle cx="100" cy="100" r="8" fill="#1e293b" stroke="#38bdf8" strokeWidth="2" />
               <circle cx="100" cy="100" r="3" fill="#ffffff" />
             </svg>
 
-            {/* Azimuth Badge Overlay */}
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 translate-y-6 pointer-events-none text-center">
               <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
                 isAlignedAzimuth ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-300'
@@ -390,10 +420,9 @@ export const DishPointer: React.FC<Props> = ({
           {/* LNB Skew Dial Graphic */}
           <div className="flex flex-col items-center text-center">
             <span className="text-[11px] text-slate-400 font-medium mb-1.5">
-              وضع وميل اللاقط LNB
+              {lang === 'ar' ? 'وضع وميل اللاقط LNB' : 'LNB Skew Position'}
             </span>
             <div className="relative w-28 h-28 flex items-center justify-center rounded-full border-2 border-dashed border-slate-700 bg-slate-950">
-              {/* LNB Body Diagram */}
               <div
                 className="w-2.5 h-16 bg-gradient-to-t from-amber-400 to-amber-200 rounded-full shadow-lg transition-transform duration-300"
                 style={{ transform: `rotate(${angles.lnbSkew}deg)` }}
@@ -406,15 +435,15 @@ export const DishPointer: React.FC<Props> = ({
               <div className="absolute left-1 text-[8px] font-mono text-slate-500">-90°</div>
             </div>
             <div className="mt-2 text-[11px] text-slate-300 font-mono">
-              ميل: <span className="text-amber-400 font-bold">{angles.lnbSkew}°</span>
+              {lang === 'ar' ? 'الميل:' : 'Skew:'} <span className="text-amber-400 font-bold">{angles.lnbSkew}°</span>
             </div>
             <span className="text-[10px] text-slate-500 max-w-[140px] leading-tight mt-0.5">
-              (انظر للاقط من أمام الصحن وأدره {angles.lnbSkew > 0 ? 'يمينًا' : 'يسارًا'})
+              ({angles.lnbSkew > 0 ? (lang === 'ar' ? 'أدر اللاقط يميناً' : 'Rotate clockwise') : (lang === 'ar' ? 'أدر اللاقط يساراً' : 'Rotate CCW')})
             </span>
           </div>
         </div>
 
-        {/* Manual Heading Slider if no sensor or user chooses manual */}
+        {/* Manual Heading Slider */}
         {(!compassSupported || !useDeviceSensor) && (
           <div className="mt-3 pt-3 border-t border-slate-800/80">
             <div className="flex justify-between text-[11px] text-slate-400 mb-1">
@@ -429,22 +458,82 @@ export const DishPointer: React.FC<Props> = ({
               onChange={(e) => setManualHeading(Number(e.target.value))}
               className="w-full accent-sky-400 cursor-pointer"
             />
-            <div className="flex justify-between text-[9px] text-slate-500 font-mono mt-1">
-              <span>0° ({t.north})</span>
-              <span>90° ({t.east})</span>
-              <span>180° ({t.south})</span>
-              <span>270° ({t.west})</span>
+          </div>
+        )}
+      </div>
+
+      {/* Phase 4: Obstacle Clearance Evaluation Tool */}
+      <div className={`p-3.5 rounded-xl border ${isOutdoorSunMode ? 'bg-black border-yellow-400/40' : 'bg-slate-900/90 border-slate-800'}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-amber-400" />
+            <h3 className="text-xs font-bold text-white">
+              {lang === 'ar' ? 'التقييم الهندسي للعوائق والمباني المجاورة' : 'Obstacle & Line-of-Sight Clearance'}
+            </h3>
+          </div>
+          <button
+            onClick={() => setShowObstacleTool(!showObstacleTool)}
+            className="text-[11px] font-semibold text-sky-400 hover:text-sky-300"
+          >
+            {showObstacleTool ? (lang === 'ar' ? 'إخفاء ▲' : 'Hide ▲') : (lang === 'ar' ? 'فحص العوائق ▼' : 'Inspect ▼')}
+          </button>
+        </div>
+
+        {showObstacleTool && (
+          <div className="mt-3 pt-3 border-t border-slate-800 space-y-3 text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-slate-400 block mb-1">
+                  {lang === 'ar' ? 'المسافة إلى العائق (متر):' : 'Obstacle Distance (m):'}
+                </label>
+                <input
+                  type="number"
+                  min="2"
+                  max="500"
+                  value={obstacleDistance}
+                  onChange={(e) => setObstacleDistance(Math.max(1, Number(e.target.value)))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-slate-400 block mb-1">
+                  {lang === 'ar' ? 'ارتفاع العائق فوق الصحن (متر):' : 'Obstacle Height Above Dish (m):'}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="200"
+                  value={obstacleHeight}
+                  onChange={(e) => setObstacleHeight(Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Obstacle Evaluation Result */}
+            <div className={`p-3 rounded-xl border flex items-start gap-2.5 ${
+              obstacleEval.isClear
+                ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300'
+                : 'bg-rose-950/40 border-rose-500/50 text-rose-300'
+            }`}>
+              {obstacleEval.isClear ? (
+                <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              ) : (
+                <Info className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 space-y-1">
+                <span className="font-bold block">
+                  {lang === 'ar' ? obstacleEval.recommendationAr : obstacleEval.recommendationEn}
+                </span>
+                <div className="text-[10px] text-slate-400 font-mono">
+                  {lang === 'ar'
+                    ? `زاوية الارتفاع المطلوبة: ${angles.elevation}° | الحد الأدنى لتجاوز العائق: ${obstacleEval.minClearanceElevationDeg}°`
+                    : `Dish Elevation: ${angles.elevation}° | Min Clearance Angle: ${obstacleEval.minClearanceElevationDeg}°`}
+                </div>
+              </div>
             </div>
           </div>
         )}
-
-        {/* Guidance Notice */}
-        <div className="mt-3 flex items-start gap-2 text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/60">
-          <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-          <p className="leading-relaxed">
-            {t.dishGuidanceNote} ({angles.azimuthTrue}° / {angles.elevation}° / {angles.lnbSkew}°).
-          </p>
-        </div>
       </div>
     </div>
   );
