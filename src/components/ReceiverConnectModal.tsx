@@ -213,7 +213,7 @@ export const ReceiverConnectModal: React.FC<Props> = ({
                 type="text"
                 value={ip}
                 onChange={(e) => setIp(e.target.value)}
-                placeholder="192.168.1.15"
+                placeholder="192.168.1.102"
                 className={`w-full bg-slate-950 border rounded-xl p-2.5 text-white font-mono text-sm focus:outline-none transition-colors ${
                   !isIpValid && protocol !== 'simulation'
                     ? 'border-rose-500/80 focus:border-rose-400'
@@ -224,14 +224,17 @@ export const ReceiverConnectModal: React.FC<Props> = ({
             </div>
             {!isIpValid && protocol !== 'simulation' && (
               <span className="text-[10px] text-rose-400 mt-1 block">
-                {lang === 'ar' ? 'تنسيق IPv4 غير صالح (أرقام بين 0 و 255 تفصلها نقاط)' : 'Invalid IPv4 (e.g. 192.168.1.15)'}
+                {lang === 'ar' ? 'تنسيق IPv4 غير صالح (أرقام بين 0 و 255 تفصلها نقاط مثل 192.168.1.102)' : 'Invalid IPv4 (e.g. 192.168.1.102)'}
               </span>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-slate-300 font-medium block mb-1">{t.port}</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-slate-300 font-medium">{t.port}</label>
+                <span className="text-[10px] text-slate-400 font-mono">DVB-IP</span>
+              </div>
               <input
                 type="text"
                 value={port}
@@ -241,6 +244,24 @@ export const ReceiverConnectModal: React.FC<Props> = ({
                   !isPortValid && protocol !== 'simulation' ? 'border-rose-500' : 'border-slate-700'
                 }`}
               />
+              {/* Common Port Presets */}
+              <div className="flex items-center gap-1 mt-1.5 overflow-x-auto">
+                <span className="text-[9px] text-slate-500 shrink-0">منافذ:</span>
+                {[20000, 8080, 80, 20002].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPort(p.toString())}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                      port === p.toString()
+                        ? 'bg-sky-500 text-black font-bold'
+                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <label className="text-slate-300 font-medium block mb-1">{t.tuner}</label>
@@ -263,7 +284,7 @@ export const ReceiverConnectModal: React.FC<Props> = ({
               className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-xs"
             >
               <option value="simulation">
-                {lang === 'ar' ? '⭐ وضع المحاكاة الافتراضية (بدون الحاجة لشبكة)' : '⭐ Virtual Simulation Mode (Offline)'}
+                {lang === 'ar' ? '⭐ وضع المحاكاة الافتراضية (بدون الحاجة لشبكة أو رسيفر)' : '⭐ Virtual Simulation Mode (Offline)'}
               </option>
               <option value="ali2661">
                 {lang === 'ar' ? 'جهاز Cristor Toro 700 / معالج Ali 2661 (شبكة محلية)' : 'Cristor Toro 700 / Ali 2661 LAN'}
@@ -308,9 +329,9 @@ export const ReceiverConnectModal: React.FC<Props> = ({
 
         {/* Honest Test Result / Diagnostic Feedback */}
         {testResult && (
-          <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${
+          <div className={`p-3.5 rounded-xl border text-xs space-y-2 ${
             testResult.success
-              ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300'
+              ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-300'
               : 'bg-rose-950/40 border-rose-500/50 text-rose-300'
           }`}>
             <div className="flex items-start gap-2">
@@ -327,24 +348,60 @@ export const ReceiverConnectModal: React.FC<Props> = ({
                   </span>
                 )}
                 {testResult.hint && (
-                  <span className="text-[11px] text-amber-300/90 block mt-1 leading-relaxed">
+                  <span className="text-[11px] text-amber-300/90 block mt-1.5 leading-relaxed bg-amber-950/40 p-2 rounded-lg border border-amber-500/30">
                     💡 {testResult.hint}
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Quick action to switch to simulation if hardware fails */}
+            {/* Quick Actions on Failure */}
             {!testResult.success && protocol !== 'simulation' && (
-              <button
-                onClick={handleSwitchToSimulation}
-                className="mt-2 w-full py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg text-xs font-bold border border-amber-500/40 transition-colors"
-              >
-                {lang === 'ar' ? 'التبديل إلى وضع المحاكاة الآن' : 'Switch to Simulation Mode'}
-              </button>
+              <div className="pt-2 space-y-2 border-t border-rose-900/40">
+                <button
+                  onClick={handleSwitchToSimulation}
+                  className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-lg text-xs font-black shadow-md transition-all flex items-center justify-center gap-1.5"
+                >
+                  <span>التبديل إلى وضع المحاكاة الآن (بدء توجيه الصحن فوراً)</span>
+                </button>
+                
+                <a
+                  href="/app-debug.apk"
+                  download="Cristor-Toro-Pro.apk"
+                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                >
+                  <span>تحميل ملف APK لتخطي حظر المتصفح للشبكة المحلية</span>
+                </a>
+              </div>
             )}
           </div>
         )}
+
+        {/* Accordion / Troubleshooting Info */}
+        <details className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-300 group">
+          <summary className="font-bold text-sky-400 cursor-pointer flex items-center justify-between select-none">
+            <span className="flex items-center gap-1.5">
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>دليل حل مشكلة الاتصال بريسيفر Cristor Toro 700:</span>
+            </span>
+            <span className="text-[10px] text-slate-500 group-open:rotate-180 transition-transform">▼</span>
+          </summary>
+          <div className="mt-2.5 space-y-2 text-slate-400 border-t border-slate-800/80 pt-2 leading-relaxed">
+            <p>
+              <strong className="text-white">1. قيود متصفحات الويب (HTTPS):</strong> المتصفحات تمنع المواقع من الوصول المباشر لأجهزة الشبكة المحلية (<code className="text-sky-300 font-mono">192.168.x.x</code>). للاتصال الحقيقي، قم بتثبيت ملف الـ APK على هاتفك أو استخدم <strong>وضع المحاكاة</strong>.
+            </p>
+            <p>
+              <strong className="text-white">2. تفعيل خدمة DVB Finder في الرسيفر:</strong>
+              <br />
+              من ريموت الريسيفر: <code className="text-amber-300">Menu ➔ Network ➔ Network App ➔ DVB Finder ➔ ON</code>.
+            </p>
+            <p>
+              <strong className="text-white">3. تطابق شبكة الواي فاي:</strong>
+              <br />
+              تأكد أن الهاتف والرسيفر متصلان بنفس شبكة الواي فاي للراوتر (وليس شبكة 4G/5G).
+            </p>
+          </div>
+        </details>
 
         {/* Action Buttons */}
         <div className="flex gap-2 pt-1">

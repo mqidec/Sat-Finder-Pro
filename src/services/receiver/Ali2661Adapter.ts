@@ -110,24 +110,27 @@ export class Ali2661Adapter implements ReceiverAdapter {
     } catch (err: any) {
       this.connected = false;
       const isAbort = err?.name === 'AbortError';
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
 
       return {
         success: false,
         state: 'error',
         errorCode: isAbort ? 'TIMEOUT' : 'HOST_UNREACHABLE',
         message: isAbort
-          ? `Connection to ${config.ip}:${config.port} timed out after 2500ms.`
-          : `Network error reaching ${config.ip}:${config.port}.`,
+          ? `انتهت مهلة الاتصال بالجهاز (${config.ip}:${config.port}).`
+          : `تعذر الاتصال بـ (${config.ip}:${config.port}). تأكد من إعدادات الشبكة أو استخدم وضع المحاكاة للتجربة الميدانية بدون رسيفر.`,
         messageAr: isAbort
           ? `انتهت مهلة الاتصال بالجهاز (${config.ip}:${config.port}). تأكد أن الرسيفر قيد التشغيل ومتصل بنفس شبكة الواي فاي.`
           : `تعذر الاتصال بـ (${config.ip}:${config.port}). تأكد من إعدادات الشبكة أو استخدم وضع المحاكاة للتجربة الميدانية بدون رسيفر.`,
         messageFr: isAbort
           ? `Délai d'attente dépassé pour ${config.ip}:${config.port}`
           : `Impossible de joindre ${config.ip}:${config.port}`,
-        diagnosticHint:
-          'Browsers enforce CORS / Mixed-Content security. If using local IP, ensure receiver supports WebSockets/HTTP CORS or use the simulator for dish aiming.',
-        diagnosticHintAr:
-          'المتصفحات تطبق قيود أمان الشبكة. تأكد من تطابق شبكة الواي فاي أو استخدم وضع المحاكاة (Simulation Mode) إذا لم يكن الرسيفر متصلاً الآن.'
+        diagnosticHint: isHttps
+          ? 'Browsers running over HTTPS block direct fetch to private LAN IPs (192.168.x.x) due to Mixed Content / Private Network policies. Install the native APK on Android or switch to Simulation Mode.'
+          : 'Browsers enforce CORS / Mixed-Content security. If using local IP, ensure receiver supports WebSockets/HTTP CORS or use the simulator for dish aiming.',
+        diagnosticHintAr: isHttps
+          ? 'المتصفح يمنع الاتصال المباشر بالشبكة المحلية (192.168.x.x) بسبب حماية (Mixed Content). لتخطي هذا القيد، قم بتثبيت ملف الـ APK على هاتفك، أو اضغط زر "التبديل إلى وضع المحاكاة" لبدء ضبط الصحن فوراً.'
+          : 'المتصفحات تطبق قيود أمان الشبكة. تأكد من تطابق شبكة الواي فاي أو استخدم وضع المحاكاة (Simulation Mode) إذا لم يكن الرسيفر متصلاً الآن.'
       };
     }
   }
