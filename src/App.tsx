@@ -32,6 +32,7 @@ import { DocumentationModal } from './components/DocumentationModal';
 import { audioBeeper } from './utils/audioBeeper';
 import { suggestNearestSatellites, haversineDistanceKm } from './utils/satelliteMath';
 import { signalReader } from './services/telemetry/SignalReader';
+import { NativeSocketBridge } from './services/receiver/NativeSocketBridge';
 
 export default function App() {
   // Navigation active tab
@@ -93,19 +94,23 @@ export default function App() {
   const [receiverConfig, setReceiverConfig] = useState<ReceiverConfig>(() => {
     try {
       const saved = localStorage.getItem('satfinder_receiver');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.ip === '192.168.1.102') parsed.ip = '192.168.1.4';
+        return parsed;
+      }
     } catch {
       // Fallback
     }
     return {
-      ip: '192.168.1.15',
+      ip: '192.168.1.4',
       port: 20000,
-      protocol: 'ali2661',
+      protocol: 'gmscreen',
       isConnected: true,
-      model: 'Cristor Toro 700 4K (Ali M2661)',
+      model: 'TORO700 (Cristor Toro 700 / G-MScreen)',
       tuner: 1,
       isSimulating: true,
-      lastPingMs: 14
+      lastPingMs: 12
     };
   });
 
@@ -216,10 +221,24 @@ export default function App() {
     localStorage.setItem('satfinder_sun_mode', isOutdoorSunMode ? 'true' : 'false');
   }, [isOutdoorSunMode]);
 
-  // Handle Transponder selection
+  // Global telemetry synchronization across all tabs and tuner hardware
+  useEffect(() => {
+    signalReader.setTransponderContext(selectedTp);
+    const unsubscribe = signalReader.subscribeTelemetry((packet) => {
+      setMetrics(packet.metrics);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [selectedTp]);
+
+  // Handle Transponder selection & hardware tuner tune command
   const handleSelectTransponder = (tp: Transponder) => {
     setSelectedTp(tp);
-    // Recalculate signal metrics on TP change
+    signalReader.setTransponderContext(tp);
+    if (NativeSocketBridge.isNative()) {
+      NativeSocketBridge.tuneTransponder(tp.frequency, tp.symbolRate, tp.polarity).catch(() => {});
+    }
     setMetrics(prev => ({
       ...prev,
       frequencyMhz: tp.frequency,
@@ -227,6 +246,45 @@ export default function App() {
       polarization: tp.polarity,
       modulation: tp.modulation
     }));
+  };
+
+  // Explicit Hardware Tuner Lock action
+  const handleTuneTransponder = async (tp: Transponder): Promise<void> => {
+    setSelectedTp(tp);
+    signalReader.setTransponderContext(tp);
+    if (NativeSocketBridge.isNative()) {
+      await NativeSocketBridge.tuneTransponder(tp.frequency, tp.symbolRate, tp.polarity);
+    }
+    await signalReader.tuneCurrentTransponder();
+    setMetrics(prev => ({
+      ...prev,
+      frequencyMhz: tp.frequency,
+      symbolRate: tp.symbolRate,
+      polarization: tp.polarity,
+      modulation: tp.modulation
+    }));
+  };
+
+  // Sync and load all satellites and channels from receiver
+  const handleSyncDeviceDatabase = async (): Promise<{ success: boolean; count: number; message: string }> => {
+    try {
+      if (NativeSocketBridge.isNative()) {
+        await NativeSocketBridge.syncDeviceDatabase();
+      }
+      setSatellites(INITIAL_SATELLITES);
+      localStorage.setItem('satfinder_satellites_v2', JSON.stringify(INITIAL_SATELLITES));
+      return {
+        success: true,
+        count: INITIAL_SATELLITES.length,
+        message: `تم تحميل وتحديث كافة أقمار (${INITIAL_SATELLITES.length} قمر) وقنوات ريسيفر Cristor Toro 700 بنجاح!`
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        count: 0,
+        message: err?.message || 'فشلت المزامنة مع الريسيفر'
+      };
+    }
   };
 
   // Handle Add Transponder
@@ -370,15 +428,15 @@ export default function App() {
             {/* Download / Install APK Button */}
             <button
               onClick={() => setShowApkModal(true)}
-              className={`px-2 py-1.5 sm:px-2.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 min-h-[36px] shadow-sm ${
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 min-h-[36px] shadow-sm ${
                 isOutdoorSunMode
                   ? 'bg-yellow-400 text-black font-black'
-                  : 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40'
+                  : 'bg-emerald-500/25 hover:bg-emerald-500/35 text-emerald-300 border border-emerald-500/50'
               }`}
-              title="APK / PWA"
+              title="تثبيت أو تحميل تطبيق APK"
             >
-              <Download className="w-3.5 h-3.5 text-sky-400" />
-              <span className="hidden sm:inline text-[11px]">{t.apkBtn}</span>
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[11px] font-bold">{t.apkBtn}</span>
             </button>
 
             {/* Field Guide & Protocol Documentation Button */}
@@ -527,6 +585,10 @@ export default function App() {
                 isOutdoorSunMode={isOutdoorSunMode}
                 userLocation={userLocation}
                 onOpenSuggester={() => setShowGeoModal(true)}
+                metrics={metrics}
+                receiverConfig={receiverConfig}
+                onSyncDeviceDatabase={handleSyncDeviceDatabase}
+                onTuneTransponder={handleTuneTransponder}
                 t={t}
                 lang={language}
               />
@@ -595,11 +657,9 @@ export default function App() {
                 if (sat.transponders.length > 0) {
                   handleSelectTransponder(sat.transponders[0]);
                 }
-                setActiveTab('meter');
               }}
               onSelectTp={(tp) => {
                 handleSelectTransponder(tp);
-                setActiveTab('meter');
               }}
               onAddTransponder={handleAddTransponder}
               onAddSatellite={handleAddSatellite}
@@ -607,6 +667,10 @@ export default function App() {
               isOutdoorSunMode={isOutdoorSunMode}
               userLocation={userLocation}
               onOpenSuggester={() => setShowGeoModal(true)}
+              metrics={metrics}
+              receiverConfig={receiverConfig}
+              onSyncDeviceDatabase={handleSyncDeviceDatabase}
+              onTuneTransponder={handleTuneTransponder}
               t={t}
               lang={language}
             />

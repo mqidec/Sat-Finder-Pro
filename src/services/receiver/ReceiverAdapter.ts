@@ -37,6 +37,11 @@ export interface ReceiverAdapter {
   }): Promise<TelemetryPacket | null>;
 
   /**
+   * Tunes the STB hardware tuner to a specific frequency and locks the carrier
+   */
+  tuneTransponder?(frequency: number, symbolRate: number, polarity: string, satId?: number): Promise<{ success: boolean; message: string }>;
+
+  /**
    * Sends DiSEqC / USALS motor movement command
    */
   sendMotorCommand(cmd: MotorCommand): Promise<{ success: boolean; message: string }>;

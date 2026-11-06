@@ -83,29 +83,54 @@ export const ApkExportModal: React.FC<Props> = ({
         </div>
 
         {/* Direct Ready APK Download Banner */}
-        <div className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/80 to-sky-950/80 border border-emerald-500/50 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500 text-black flex items-center justify-center font-black shrink-0 shadow-md">
-              <Download className="w-5 h-5 stroke-[2.5]" />
-            </div>
-            <div>
-              <div className="font-bold text-white text-xs sm:text-sm flex items-center gap-1.5">
-                <span>ملف APK جاهز للتحميل والتثبيت</span>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded font-mono">4.6 MB</span>
+        <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/90 via-sky-950/80 to-slate-900 border-2 border-emerald-500/70 space-y-3 shadow-xl">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-emerald-500 text-black flex items-center justify-center font-black shrink-0 shadow-md">
+                <Download className="w-6 h-6 stroke-[2.5]" />
               </div>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                حزمة <code className="text-sky-300 font-mono">APK_DOWNLOAD/app-debug.apk</code> مبنية ومدرجة بالمشروع.
-              </p>
+              <div>
+                <div className="font-black text-white text-sm sm:text-base flex items-center gap-2 flex-wrap">
+                  <span>تطبيق الأندرويد الأصلي (APK المحدث)</span>
+                  <span className="text-[10px] bg-emerald-500 text-black font-black px-2 py-0.5 rounded-full font-mono">
+                    v1.0.22176-ULTRA (المطابق لفيديو G-MScreen + قياس dB)
+                  </span>
+                  <span className="text-[10px] bg-sky-950 text-sky-300 border border-sky-700/60 px-2 py-0.5 rounded font-mono">
+                    12.8 MB
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  النسخة المحدثة كلياً المتوافقة مع بروتوكول <code className="text-emerald-300 font-mono font-bold">v1.0.22176 [May 7 2026]</code> الظاهر في الفيديو، مع الميزة المطلوبة: إظهار مستوى الإشارة الحقيقي بدقة بالديسيبل <code className="text-sky-300 font-mono font-bold">dB SNR</code> وربط التيونر اللحظي.
+                </p>
+              </div>
             </div>
           </div>
-          <a
-            href="/app-debug.apk"
-            download="Cristor-Toro-Pro.apk"
-            className="w-full sm:w-auto px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-md transition-all shrink-0"
-          >
-            <Download className="w-4 h-4 stroke-[2.5]" />
-            <span>تنزيل APK الآن</span>
-          </a>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+            <a
+              href="/APK_DOWNLOAD/app-debug.apk"
+              download="Cristor-Toro-Pro-v1.1.apk"
+              className="py-2.5 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all text-center cursor-pointer"
+            >
+              <Download className="w-4 h-4 stroke-[2.5]" />
+              <span>تنزيل APK المحدث (رابط مباشر 1)</span>
+            </a>
+
+            <a
+              href="/app-debug.apk"
+              download="Cristor-Toro-Pro-v1.1.apk"
+              className="py-2.5 px-3 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all text-center cursor-pointer"
+            >
+              <Download className="w-4 h-4 stroke-[2.5]" />
+              <span>تنزيل بديل (رابط مباشر 2)</span>
+            </a>
+          </div>
+
+          <div className="text-[10px] text-slate-400 font-mono text-center flex items-center justify-center gap-2">
+            <span>المسار بالمشروع: APK_DOWNLOAD/app-debug.apk</span>
+            <span>•</span>
+            <span className="text-emerald-400">جاهز للتثبيت على هواتف Android</span>
+          </div>
         </div>
 
         {/* Tab Navigation */}

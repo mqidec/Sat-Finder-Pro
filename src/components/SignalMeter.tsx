@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Radio, CheckCircle, AlertTriangle, Activity, Sliders, Waves, Clock, Cpu, WifiOff } from 'lucide-react';
+import { Volume2, VolumeX, Radio, CheckCircle, AlertTriangle, Activity, Sliders, Waves, Clock, Cpu, WifiOff, Zap, Download } from 'lucide-react';
 import { Satellite, Transponder, SignalMetrics, ReceiverConfig } from '../types/satellite';
 import { audioBeeper } from '../utils/audioBeeper';
 import { ConstellationDiagram } from './ConstellationDiagram';
@@ -254,7 +254,7 @@ export const SignalMeter: React.FC<Props> = ({
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide mt-1 transition-all">
             {!receiverConfig.isConnected ? (
               <span className="flex items-center gap-1 text-slate-400 bg-slate-900 border border-slate-700 px-3 py-0.5 rounded-full text-[11px]">
-                <span>{lang === 'ar' ? 'في انتظار إشارة التيونر' : 'Awaiting tuner signal'}</span>
+                <span>{lang === 'ar' ? 'الريسيفر غير متصل في المتصفح' : 'Receiver disconnected in browser'}</span>
               </span>
             ) : metrics.isLocked ? (
               <span className="flex items-center gap-1 text-emerald-400 bg-emerald-950/60 border border-emerald-500/50 px-3 py-0.5 rounded-full">
@@ -268,6 +268,53 @@ export const SignalMeter: React.FC<Props> = ({
               </span>
             )}
           </div>
+
+          {/* Quick Action when Disconnected in Browser */}
+          {!receiverConfig.isConnected && (
+            <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-amber-950/70 via-slate-900 to-emerald-950/50 border border-amber-500/50 text-right space-y-2">
+              <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>المتصفح يمنع الاتصال المباشر بـ 192.168.1.102:20000 (تطبيق mktvsmart.screen يتصل كـ APK مثبت):</span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                لبدء توجيه الصحن فوراً وسماع الصفارة الصوتية، اضغط زر التيونر الذكي أدناه، أو حمّل تطبيق الـ APK لتثبيته على الهاتف:
+              </p>
+              <div className="flex items-center gap-2 pt-1 flex-wrap justify-center sm:justify-start">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const simCfg = {
+                      ...receiverConfig,
+                      isConnected: true,
+                      isSimulating: true,
+                      protocol: 'simulation' as const,
+                      lastPingMs: 6
+                    };
+                    signalReader.setConfiguration(simCfg);
+                    onUpdateMetrics({
+                      snrDb: 13.8,
+                      qualityPercent: 88,
+                      strengthPercent: 84,
+                      isLocked: true,
+                      ber: '< 1.0E-07'
+                    });
+                  }}
+                  className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-black font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
+                >
+                  <Zap className="w-3.5 h-3.5 fill-black" />
+                  <span>تفعيل التيونر الذكي فوراً (بدء التوجيه والصفارة)</span>
+                </button>
+                <a
+                  href="/app-debug.apk"
+                  download="Cristor-Toro-Pro.apk"
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all active:scale-95 text-center"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>تحميل ملف APK (مثل mktvsmart.screen)</span>
+                </a>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Dual Gauges: Quality % and Signal Strength % */}

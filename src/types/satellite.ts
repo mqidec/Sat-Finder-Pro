@@ -65,7 +65,7 @@ export interface UserLocation {
 export interface ReceiverConfig {
   ip: string;
   port: number;
-  protocol: 'ali2661' | 'dvbfinder' | 'http_api' | 'simulation';
+  protocol: 'ali2661' | 'gmscreen' | 'dvbfinder' | 'http_api' | 'simulation';
   isConnected: boolean;
   model: string;
   tuner: number;

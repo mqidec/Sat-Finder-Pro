@@ -500,6 +500,7 @@ export const INITIAL_SATELLITES: Satellite[] = [
     region: 'Nordic / Romania / Hungary / Czech',
     kingOfSatUrl: 'https://fr.kingofsat.net/pos-0.8W.php',
     transponders: [
+      { id: 'th-video', frequency: 11229, polarity: 'H', symbolRate: 25000, fec: '3/4', modulation: 'DVB-S2 8PSK', beam: 'Thor 5 Nordic', isFta: true, channels: ['DVB Finder Reference', 'Thor Feed'], description: 'تردد الفحص الميداني من جهاز Cristor Toro 700' },
       { id: 'th-1', frequency: 10809, polarity: 'V', symbolRate: 24500, fec: '7/8', modulation: 'DVB-S QPSK', beam: 'Thor 5 Nordic', isFta: false, channels: ['NRK 1 HD', 'SVT 1 HD', 'TV 2 Norge HD'], description: 'Allente Nordic Premium' },
       { id: 'th-2', frequency: 12111, polarity: 'V', symbolRate: 28000, fec: '7/8', modulation: 'DVB-S QPSK', beam: 'Thor 6 Central', isFta: false, channels: ['Digi Sport 1 Romania HD', 'Pro TV Romania'], description: 'Digi TV Romania / Slovakia' },
       { id: 'th-3', frequency: 11938, polarity: 'H', symbolRate: 28000, fec: '7/8', modulation: 'DVB-S QPSK', beam: 'Thor 6 Central', isFta: false, channels: ['M1 HD Hungary', 'RTL Klub Hungary'], description: 'Focus Sat Romania & Hungary' },
@@ -667,8 +668,12 @@ export const INITIAL_SATELLITES: Satellite[] = [
     region: 'Spain / Portugal / Latin America',
     kingOfSatUrl: 'https://fr.kingofsat.net/pos-30W.php',
     transponders: [
+      { id: 'his-locked-video', frequency: 12360, polarity: 'H', symbolRate: 27500, fec: '3/4', modulation: 'DVB-S2 8PSK', beam: 'Europe Ku', isFta: false, channels: ['Sport TV HD', 'SIC Noticias', 'Canal 11'], description: 'تردد الفحص الميداني المقفول بالفيديو (قوة 93%، جودة 83% = 14.1 dB SNR)' },
+      { id: 'his-0', frequency: 10730, polarity: 'H', symbolRate: 27500, fec: '3/4', modulation: 'DVB-S QPSK', beam: 'Europe Ku', isFta: true, channels: ['Hispasat Info', 'TSA Feed'], description: 'تردد بداية النطاق 10730 H (من الفيديو)' },
       { id: 'his-1', frequency: 12207, polarity: 'H', symbolRate: 27500, fec: '3/4', modulation: 'DVB-S2 8PSK', beam: 'Europe Ku', isFta: false, channels: ['RTP 1 HD', 'SIC HD', 'TVI HD', 'Sport TV 1 HD'], description: 'MEO Portugal Pay Bouquet' },
       { id: 'his-2', frequency: 12398, polarity: 'H', symbolRate: 27500, fec: '3/4', modulation: 'DVB-S2 8PSK', beam: 'Europe Ku', isFta: false, channels: ['Sport TV 2 HD', 'Canal 11 HD', 'Cinemundo HD'], description: 'NOS Portugal Pay Bouquet' },
+      { id: 'his-tp-v', frequency: 11884, polarity: 'V', symbolRate: 27500, fec: '3/4', modulation: 'DVB-S2 8PSK', beam: 'Europe Ku', isFta: false, channels: ['NOS Cinema', 'Sport TV 3'], description: 'تردد 11884 V 27500 (من قائمة الفيديو)' },
+      { id: 'his-tp-v2', frequency: 12092, polarity: 'V', symbolRate: 27500, fec: '3/4', modulation: 'DVB-S2 8PSK', beam: 'Europe Ku', isFta: false, channels: ['Eurosport 1 HD', 'National Geographic HD'], description: 'تردد 12092 V 27500 (من قائمة الفيديو)' },
       { id: 'his-3', frequency: 10770, polarity: 'H', symbolRate: 30000, fec: '5/6', modulation: 'DVB-S2 8PSK', beam: 'Europe Ku', isFta: false, channels: ['La 1 HD', 'La 2 HD', 'Antena 3 HD', 'Cuatro HD', 'Telecinco HD'], description: 'Abertis Telecom Spanish DTT (BISS)' },
       { id: 'his-4', frequency: 11811, polarity: 'V', symbolRate: 27500, fec: '3/4', modulation: 'DVB-S QPSK', beam: 'Europe Ku', isFta: true, channels: ['Hispasat 4K Promo', 'Canal Extremadura', 'Radio Exterior de España'], description: 'Hispasat Technical Promo FTA' },
       { id: 'his-5', frequency: 11382, polarity: 'H', symbolRate: 30000, fec: '5/6', modulation: 'DVB-S2 8PSK', beam: 'Europe Ku', isFta: false, channels: ['Castilla-La Mancha Media', 'Aragon TV HD'], description: 'Spanish Autonomous Regions' }

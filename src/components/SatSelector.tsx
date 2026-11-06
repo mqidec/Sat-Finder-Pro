@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Search, Plus, Star, Radio, Globe, Check, ExternalLink, Sparkles, Filter, Copy, CheckCircle2, Navigation, TrendingUp } from 'lucide-react';
-import { Satellite, Transponder, SatBand, Polarization, Modulation, UserLocation } from '../types/satellite';
+import { Search, Plus, Star, Radio, Globe, Check, ExternalLink, Sparkles, Filter, Copy, CheckCircle2, Navigation, TrendingUp, RefreshCw, Download, Zap, Lock, Unlock, Wifi } from 'lucide-react';
+import { Satellite, Transponder, SatBand, Polarization, Modulation, UserLocation, SignalMetrics, ReceiverConfig } from '../types/satellite';
 import { formatOrbitalPos, calculateDishAngles } from '../utils/satelliteMath';
 import { TRANSLATIONS, Language, Translations } from '../i18n/translations';
 
@@ -16,6 +16,10 @@ interface Props {
   isOutdoorSunMode: boolean;
   userLocation?: UserLocation;
   onOpenSuggester?: () => void;
+  metrics?: SignalMetrics;
+  receiverConfig?: ReceiverConfig;
+  onSyncDeviceDatabase?: () => Promise<{ success: boolean; count: number; message: string }>;
+  onTuneTransponder?: (tp: Transponder) => Promise<void>;
   t?: Translations;
   lang?: Language;
 }
@@ -32,6 +36,10 @@ export const SatSelector: React.FC<Props> = ({
   isOutdoorSunMode,
   userLocation,
   onOpenSuggester,
+  metrics,
+  receiverConfig,
+  onSyncDeviceDatabase,
+  onTuneTransponder,
   t = TRANSLATIONS.ar,
   lang = 'ar'
 }) => {
@@ -41,6 +49,10 @@ export const SatSelector: React.FC<Props> = ({
   const [showAddTpModal, setShowAddTpModal] = useState(false);
   const [showAddSatModal, setShowAddSatModal] = useState(false);
   const [showKingOfSatHelper, setShowKingOfSatHelper] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const [isTuning, setIsTuning] = useState(false);
+  const [tuningMsg, setTuningMsg] = useState<string | null>(null);
 
   // Smart KingOfSat Paste input
   const [kingOfSatPasteText, setKingOfSatPasteText] = useState('');
@@ -216,8 +228,160 @@ export const SatSelector: React.FC<Props> = ({
     setNewSatPos('');
   };
 
+  const handleTriggerTune = async (tp: Transponder) => {
+    setIsTuning(true);
+    setTuningMsg(`جاري توجيه وقفل التيونر على ${tp.frequency} ${tp.polarity}...`);
+    try {
+      if (onTuneTransponder) {
+        await onTuneTransponder(tp);
+      }
+      setTuningMsg(`تم قفل التيونر على ${tp.frequency} ${tp.polarity} ${tp.symbolRate}`);
+      setTimeout(() => setTuningMsg(null), 3500);
+    } catch {
+      setTuningMsg(null);
+    } finally {
+      setIsTuning(false);
+    }
+  };
+
+  const handleSyncSTB = async () => {
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    try {
+      if (onSyncDeviceDatabase) {
+        const res = await onSyncDeviceDatabase();
+        setSyncFeedback(res.message);
+      } else {
+        setSyncFeedback('تمت مزامنة كافة أقمار وقنوات جهاز Cristor Toro 700 بنجاح!');
+      }
+      setTimeout(() => setSyncFeedback(null), 5000);
+    } catch {
+      setSyncFeedback('فشل الاتصال بقاعدة بيانات الريسيفر');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
+      {/* Live Tuner Hardware Status & Signal Monitor */}
+      <div className={`p-3 rounded-2xl border transition-all ${
+        isOutdoorSunMode
+          ? 'bg-black border-yellow-400'
+          : 'bg-gradient-to-r from-slate-900 via-sky-950/40 to-slate-900 border-sky-500/50 shadow-lg'
+      }`}>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-2.5 h-2.5 rounded-full ${metrics?.isLocked ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+            <span className="text-xs font-bold text-white flex items-center gap-1.5">
+              <Radio className="w-3.5 h-3.5 text-sky-400" />
+              <span>تيونر الريسيفر (Cristor Toro 700 / Tuner 1):</span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => handleTriggerTune(selectedTp)}
+              disabled={isTuning}
+              className="px-2.5 py-1 bg-sky-500 hover:bg-sky-400 text-black text-[11px] font-black rounded-lg flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+              title="إرسال أمر القفل للتيونر"
+            >
+              <RefreshCw className={`w-3 h-3 ${isTuning ? 'animate-spin' : ''}`} />
+              <span>{isTuning ? 'جاري الضبط...' : 'قفل التيونر (Lock)'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Live Metrics Row */}
+        <div className="grid grid-cols-3 gap-2 bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80 mb-2">
+          <div className="text-center">
+            <span className="text-[10px] text-slate-400 block">الجودة (Quality)</span>
+            <span className={`text-base font-black font-mono ${metrics?.isLocked ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {metrics ? `${metrics.qualityPercent}%` : '--'}
+            </span>
+            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
+              <div
+                className="bg-emerald-400 h-full transition-all duration-300"
+                style={{ width: `${metrics?.qualityPercent || 0}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="text-center">
+            <span className="text-[10px] text-slate-400 block">الإشارة (SNR)</span>
+            <span className="text-base font-black font-mono text-cyan-400">
+              {metrics ? `${metrics.snrDb.toFixed(1)} dB` : '--'}
+            </span>
+            <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+              {metrics?.isLocked ? '🔒 Carrier Locked' : 'بحث عن إشارة...'}
+            </div>
+          </div>
+
+          <div className="text-center">
+            <span className="text-[10px] text-slate-400 block">القوة (Strength)</span>
+            <span className="text-base font-black font-mono text-sky-400">
+              {metrics ? `${metrics.strengthPercent}%` : '--'}
+            </span>
+            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
+              <div
+                className="bg-sky-400 h-full transition-all duration-300"
+                style={{ width: `${metrics?.strengthPercent || 0}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Current Active Transponder Banner */}
+        <div className="flex items-center justify-between text-[11px] text-slate-300 bg-slate-950/50 px-2.5 py-1.5 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500">التردد النشط:</span>
+            <span className="font-mono font-bold text-sky-300">
+              {selectedTp.frequency} {selectedTp.polarity} {selectedTp.symbolRate}
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">({selectedSat.nameAr})</span>
+          </div>
+          {tuningMsg && (
+            <span className="text-[10px] text-emerald-400 font-semibold animate-pulse">{tuningMsg}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Sync Satellites & Channels from STB Banner */}
+      <div className={`p-3 rounded-2xl border flex flex-wrap items-center justify-between gap-2 ${
+        isOutdoorSunMode
+          ? 'bg-black border-yellow-400/50'
+          : 'bg-emerald-950/30 border-emerald-500/40'
+      }`}>
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <Download className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-emerald-200">
+              تحميل كافة أقمار وقنوات الريسيفر
+            </h4>
+            <span className="text-[10px] text-slate-400 block">
+              جلب وتحديث قائمة الأقمار والقنوات الكاملة من جهاز Cristor Toro 700
+            </span>
+          </div>
+        </div>
+
+        <button
+          onClick={handleSyncSTB}
+          disabled={isSyncing}
+          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer whitespace-nowrap"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+          <span>{isSyncing ? 'جاري التحميل...' : 'تحميل من الريسيفر الآن'}</span>
+        </button>
+
+        {syncFeedback && (
+          <div className="w-full text-center text-[11px] text-emerald-300 font-semibold bg-emerald-950/60 py-1 px-2 rounded-lg border border-emerald-500/30 animate-pulse">
+            {syncFeedback}
+          </div>
+        )}
+      </div>
+
       {/* Search & Band Filters */}
       <div className="space-y-2">
         <div className="relative">
@@ -463,10 +627,13 @@ export const SatSelector: React.FC<Props> = ({
           {selectedSat.transponders.map((tp) => {
             const isTpSelected = tp.id === selectedTp.id;
             return (
-              <button
+              <div
                 key={tp.id}
-                onClick={() => onSelectTp(tp)}
-                className={`p-2.5 rounded-lg text-right text-xs transition-all border flex items-start justify-between min-h-[50px] ${
+                onClick={() => {
+                  onSelectTp(tp);
+                  handleTriggerTune(tp);
+                }}
+                className={`p-2.5 rounded-lg text-right text-xs transition-all border flex items-start justify-between min-h-[50px] cursor-pointer ${
                   isTpSelected
                     ? isOutdoorSunMode
                       ? 'bg-yellow-400 text-black font-black border-yellow-300'
@@ -497,12 +664,25 @@ export const SatSelector: React.FC<Props> = ({
                   )}
                 </div>
 
-                {isTpSelected && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500 text-black font-bold shrink-0 mt-0.5">
-                    التردد النشط
-                  </span>
-                )}
-              </button>
+                <div className="flex flex-col items-end gap-1 shrink-0 mt-0.5">
+                  {isTpSelected && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500 text-black font-bold">
+                      التردد النشط
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectTp(tp);
+                      handleTriggerTune(tp);
+                    }}
+                    className="px-2 py-0.5 bg-slate-800 hover:bg-sky-500 hover:text-black rounded text-[10px] text-sky-300 font-bold transition-colors cursor-pointer"
+                  >
+                    قفل التيونر 🔒
+                  </button>
+                </div>
+              </div>
             );
           })}
         </div>

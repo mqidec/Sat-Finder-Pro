@@ -3,6 +3,7 @@ import { ConnectionResult, ConnectionState, SignalHistorySample, TelemetryPacket
 import { ReceiverAdapter } from '../receiver/ReceiverAdapter';
 import { SimulationAdapter } from '../receiver/SimulationAdapter';
 import { Ali2661Adapter } from '../receiver/Ali2661Adapter';
+import { GMScreenAdapter } from '../receiver/GMScreenAdapter';
 import { DvbFinderAdapter } from '../receiver/DvbFinderAdapter';
 import { SignalNormalizer } from './SignalNormalizer';
 
@@ -79,6 +80,23 @@ export class SignalReader {
 
   public setTransponderContext(tp: Transponder): void {
     this.currentContext = tp;
+    if (this.connectionState === 'connected' && this.adapter.tuneTransponder) {
+      this.adapter.tuneTransponder(tp.frequency, tp.symbolRate, tp.polarity).catch(() => {});
+    }
+  }
+
+  public async tuneCurrentTransponder(): Promise<{ success: boolean; message: string }> {
+    if (!this.currentContext) {
+      return { success: false, message: 'لم يتم تحديد تردد' };
+    }
+    if (this.adapter.tuneTransponder) {
+      return await this.adapter.tuneTransponder(
+        this.currentContext.frequency,
+        this.currentContext.symbolRate,
+        this.currentContext.polarity
+      );
+    }
+    return { success: true, message: 'تم ضبط التيونر الافتراضي' };
   }
 
   public async setConfiguration(newConfig: ReceiverConfig): Promise<ConnectionResult> {
@@ -87,6 +105,8 @@ export class SignalReader {
     // Switch adapter based on protocol
     if (newConfig.protocol === 'simulation' || newConfig.isSimulating) {
       this.adapter = new SimulationAdapter();
+    } else if (newConfig.protocol === 'gmscreen') {
+      this.adapter = new GMScreenAdapter();
     } else if (newConfig.protocol === 'ali2661') {
       this.adapter = new Ali2661Adapter();
     } else {

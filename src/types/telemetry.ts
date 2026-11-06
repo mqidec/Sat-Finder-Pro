@@ -1,6 +1,6 @@
 import { Modulation, Polarization, SignalMetrics } from './satellite';
 
-export type AdapterType = 'simulation' | 'ali2661' | 'dvbfinder' | 'http_api';
+export type AdapterType = 'simulation' | 'ali2661' | 'gmscreen' | 'dvbfinder' | 'http_api';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error' | 'stale';
 

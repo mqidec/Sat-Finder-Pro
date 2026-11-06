@@ -81,37 +81,16 @@ define(['./workbox-afac4cd2'], (function (workbox) { 'use strict';
     "revision": "1872c500de691dce40960bb85481de07"
   }, {
     "url": "index.html",
-    "revision": "205f7bfbd6bdc0102b8cb464501ab3ea"
+    "revision": "8feb5fa9ca0b8e8f21e5cc1d946b564c"
   }, {
-    "url": "icon.svg",
-    "revision": "d34c4ef2ee00687a8c9bb6f87877ba5b"
-  }, {
-    "url": "icon-maskable-512.png",
-    "revision": "50b26ae09aa6db27699b386c218e50d2"
-  }, {
-    "url": "icon-512.png",
-    "revision": "50b26ae09aa6db27699b386c218e50d2"
-  }, {
-    "url": "icon-192.png",
-    "revision": "0ac1c784c377cbfe66a6b3ed550f5e3f"
-  }, {
-    "url": "assets/index-DGJG4Wlh.css",
+    "url": "assets/index-CAvLdxWM.js",
     "revision": null
   }, {
-    "url": "assets/index-B8RJB1iy.js",
+    "url": "assets/index-Agzl_rcj.css",
     "revision": null
   }, {
-    "url": "icon-192.png",
-    "revision": "0ac1c784c377cbfe66a6b3ed550f5e3f"
-  }, {
-    "url": "icon-512.png",
-    "revision": "50b26ae09aa6db27699b386c218e50d2"
-  }, {
-    "url": "icon-maskable-512.png",
-    "revision": "50b26ae09aa6db27699b386c218e50d2"
-  }, {
-    "url": "icon.svg",
-    "revision": "d34c4ef2ee00687a8c9bb6f87877ba5b"
+    "url": "assets/aistudio/image_2bd73662.png",
+    "revision": null
   }, {
     "url": "manifest.json",
     "revision": "cb4fc865b1d83a73360631b644480f2e"
